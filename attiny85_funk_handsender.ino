@@ -33,9 +33,9 @@
  * 433MHz Empfänger/Sender.
  * PTT ungenutzt, sollte ein freier Pin des MC sein.
  */
-#define rh_rx_pin 6 // nicht vorhanden
+#define rh_rx_pin 5 // nicht vorhanden
 #define rh_tx_pin 3
-#define rh_ptt_pin 7 // nicht vorhanden
+#define rh_ptt_pin 5 // nicht vorhanden
 
 /*
  * Pins der Taster S1, S2 und S3
@@ -59,12 +59,17 @@
  */
 #define RH_ASK_MAX_MESSAGE_LEN 2
 
+//#define RH_ASK_ARDUINO_USE_TIMER2
+
 /*
  *******************************************
  */
 
 // Sleep-Funktionen des MC
 #include <avr/sleep.h>
+
+// Lib für _delay_ms(x), da bei Verwendung von RadioHead delay(x) nicht funktioniert
+#include <util/delay.h>
 
 // RadioHead
 #include <RH_ASK.h>
@@ -110,18 +115,33 @@ void setup() {
     // Init fehlgeschlagen... LED blinken und dann in endlosschleife wechseln
     for(uint8_t i=0; i<10; i++){
       digitalWrite(led, HIGH);
-      delay(200);
+      _delay_ms(led_time);
       digitalWrite(led, LOW);
-      delay(200);
+      _delay_ms(led_time);
     }
     for(;;){ }
   }
 
+  // ADC deaktivieren zum Strom sparen
+  ADCSRA &= ~(1<<ADEN);
+
+  // Analog Comparator deaktivieren zum Strom sparen
+  ACSR |= (1<<ACD);
+
+  
+
   // PCINT für die 3 Taster aktivieren
-  PCMSK |= ((digitalPinToPCMSKbit(taster_1)) || (digitalPinToPCMSKbit(taster_2)) || (digitalPinToPCMSKbit(taster_3)));
+  PCMSK |= 0b00000111;
 
   // PCIE im GIMSK Register aktivieren
   GIMSK |= (1<<5);
+
+  for(uint8_t i=0; i<3; i++){
+    digitalWrite(led, HIGH);
+    _delay_ms(led_time);
+    digitalWrite(led, LOW);
+    _delay_ms(led_time);
+  }
 }
 
 /*
@@ -140,6 +160,9 @@ void loop() {
 
   // disable all interrupts
   //cli();
+  
+  // entprellen
+  _delay_ms(50);
 
   // Taster abfragen...
   t1 = digitalRead(taster_1);
@@ -147,36 +170,17 @@ void loop() {
   t3 = digitalRead(taster_3);
 
   // ... und auswerten
-  if(t1 != t1_last){
-    if(t1 == LOW){
-      // T1 gedrückt
-      senden(0x01);
-    }
-    // entprellen
-    delay(50);
-
-    t1_last = t1;
-    
-  }else if(t2 != t2_last){
-    if(t2 == LOW){
-      // T2 gedrückt
-      senden(0x02);
-    }
-    // entprellen
-    delay(50);
-
-    t2_last = t2;
-    
-  }else if(t3 != t3_last){
-    if(t3 == LOW){
-      // T3 gedrückt
-      senden(0x03);
-    }
-    // entprellen
-    delay(50);
-
-    t3_last = t3;
+  if(t1 == LOW){
+    // T1 gedrückt
+    senden(0x01);
+  }else if(t2 == LOW){
+    // T2 gedrückt
+    senden(0x02);
+  }else if(t3 == LOW){
+    // T3 gedrückt
+    senden(0x03);
   }
+  
 }
 
 /*
@@ -193,7 +197,7 @@ void senden(uint8_t cmd){
   rh_manager.sendto(rh_buf, 2, rh_server_addr);
 
   // Kurz warten und LED wieder ausschalten
-  delay(led_time);
+  _delay_ms(led_time);
   digitalWrite(led,LOW);
 }
 
